@@ -1,0 +1,326 @@
+﻿<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gráfico de Funciones Cuadráticas</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <style>
+        /* Estilos para el contenedor del gráfico */
+        #chart-container {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            width: 100%;
+            padding-bottom: 70%; /* Relación de aspecto para móvil */
+            position: relative;
+            background-color: #f8f8f8;
+            border-radius: 0.75rem;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -4px rgba(0, 0, 0, 0.1);
+        }
+        svg {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+        }
+        /* Estilos de botones */
+        .btn-exercise {
+            transition: all 0.2s ease;
+        }
+        .btn-exercise.active {
+            background-color: #f97316; /* Naranja 600 */
+            color: white;
+            box-shadow: 0 4px 6px -1px rgba(249, 115, 22, 0.5);
+            transform: scale(1.05);
+        }
+    </style>
+</head>
+<body class="bg-gray-100 min-h-screen p-4 sm:p-8 font-sans">
+
+
+    <div class="max-w-5xl mx-auto">
+        <h1 class="text-3xl font-bold text-gray-800 mb-2 text-center">Visualizador de Parábolas</h1>
+        <p class="text-gray-600 text-center mb-6">Selecciona una función cuadrática para ver su gráfica, vértice y cortes.</p>
+
+
+        <!-- Contenedor de Botones de Ejercicio -->
+        <div id="exercise-buttons" class="flex flex-wrap justify-center gap-2 p-4 bg-white rounded-xl shadow-lg mb-6">
+            <!-- Los botones se generarán con JavaScript -->
+        </div>
+
+
+        <!-- Contenedor del Gráfico -->
+        <div id="chart-container" class="mb-6">
+            <svg id="chart-svg"></svg>
+        </div>
+
+
+        <!-- Resultados y Leyenda -->
+        <div class="bg-white p-4 sm:p-6 rounded-xl shadow-lg">
+            <h2 id="current-equation" class="text-xl font-semibold text-orange-600 mb-3"></h2>
+            <div id="results-table" class="space-y-3 text-gray-700">
+                <!-- Los resultados se mostrarán aquí -->
+            </div>
+        </div>
+    </div>
+
+
+    <script>
+        // Definición de todas las funciones cuadráticas y sus puntos
+        const functionsData = [
+            // { id, equation, a, b, c, Vx, Vy, x_cuts, y_cut }
+            { id: 1, eq: 'y = x^2 + 4x + 3', a: 1, b: 4, c: 3, Vx: -2, Vy: -1, x_cuts: [-1, -3], y_cut: 3 },
+            { id: 2, eq: 'y = x^2 - 4x + 4', a: 1, b: -4, c: 4, Vx: 2, Vy: 0, x_cuts: [2], y_cut: 4 },
+            { id: 3, eq: 'y = -x^2 + 2x - 3', a: -1, b: 2, c: -3, Vx: 1, Vy: -2, x_cuts: [], y_cut: -3 }, // Sin raíces reales
+            { id: 4, eq: 'y = 2x^2 + 2x + 8', a: 2, b: 2, c: 8, Vx: -0.5, Vy: 7.5, x_cuts: [], y_cut: 8 }, // Sin raíces reales
+            { id: 5, eq: 'y = x^2 - 2x + 8', a: 1, b: -2, c: 8, Vx: 1, Vy: 7, x_cuts: [], y_cut: 8 }, // Sin raíces reales
+            { id: 6, eq: 'y = x^2 - 6x + 5', a: 1, b: -6, c: 5, Vx: 3, Vy: -4, x_cuts: [5, 1], y_cut: 5 },
+            { id: 7, eq: 'y = -x^2 + 9x - 6', a: -1, b: 9, c: -6, Vx: 4.5, Vy: 14.25, x_cuts: [0.73, 8.27], y_cut: -6 },
+            { id: 8, eq: 'y = -3x^2 + 9x + 6', a: -3, b: 9, c: 6, Vx: 1.5, Vy: 12.75, x_cuts: [-0.68, 3.68], y_cut: 6 }, // Ajuste de raíces
+            { id: 9, eq: 'y = -2x^2 + 2x + 3', a: -2, b: 2, c: 3, Vx: 0.5, Vy: 3.5, x_cuts: [-0.82, 1.82], y_cut: 3 }, // Ajuste de raíces
+            { id: 10, eq: 'y = -3x^2 + 9x - 6', a: -3, b: 9, c: -6, Vx: 1.5, Vy: 0.75, x_cuts: [1, 2], y_cut: -6 }
+        ];
+
+
+        // Función para evaluar la parábola
+        const evaluateParabola = (data, x) => data.a * x * x + data.b * x + data.c;
+
+
+        // Función principal de dibujo
+        const drawChart = (data) => {
+            const svg = d3.select("#chart-svg");
+            const container = document.getElementById('chart-container');
+            const width = container.clientWidth;
+            const height = container.clientHeight;
+            const margin = { top: 20, right: 20, bottom: 30, left: 30 };
+            const innerWidth = width - margin.left - margin.right;
+            const innerHeight = height - margin.top - margin.bottom;
+
+
+            // Limpiar SVG anterior
+            svg.selectAll("*").remove();
+
+
+            // 1. Definir dominio (rango de la gráfica)
+            const padding = 2; // Espacio extra alrededor del vértice y cortes
+            const xMin = Math.min(data.Vx - padding, ...data.x_cuts) - 1;
+            const xMax = Math.max(data.Vx + padding, ...data.x_cuts) + 1;
+
+
+            const yMinFunc = evaluateParabola(data, xMin);
+            const yMaxFunc = evaluateParabola(data, xMax);
+
+
+            const yDomainMin = data.a > 0 ? data.Vy - padding : Math.min(yMinFunc, yMaxFunc) - padding;
+            const yDomainMax = data.a > 0 ? Math.max(yMinFunc, yMaxFunc) + padding : data.Vy + padding;
+
+
+            const xDomain = [xMin, xMax];
+            const yDomain = [yDomainMin, yDomainMax];
+
+
+
+
+            // Crear escalas
+            const xScale = d3.scaleLinear().domain(xDomain).range([0, innerWidth]);
+            const yScale = d3.scaleLinear().domain(yDomain).range([innerHeight, 0]);
+
+
+            const g = svg.append("g").attr("transform", `translate(${margin.left},${margin.top})`);
+
+
+            // --- Dibujar Ejes ---
+
+
+            // Eje X
+            const xAxis = d3.axisBottom(xScale).tickSizeOuter(0);
+            if (yScale(0) > innerHeight || yScale(0) < 0) { // Si el eje X está fuera del rango visible, dibujar solo la línea.
+                 g.append("line")
+                    .attr("x1", 0).attr("y1", innerHeight).attr("x2", innerWidth).attr("y2", innerHeight)
+                    .attr("stroke", "#ccc");
+            } else {
+                g.append("g")
+                    .attr("transform", `translate(0, ${yScale(0)})`)
+                    .call(xAxis)
+                    .selectAll("text").style("font-size", "10px");
+            }
+
+
+
+
+            // Eje Y
+            const yAxis = d3.axisLeft(yScale).tickSizeOuter(0);
+            if (xScale(0) < 0 || xScale(0) > innerWidth) { // Si el eje Y está fuera del rango visible, dibujar solo la línea.
+                 g.append("line")
+                    .attr("x1", 0).attr("y1", 0).attr("x2", 0).attr("y2", innerHeight)
+                    .attr("stroke", "#ccc");
+            } else {
+                g.append("g")
+                    .attr("transform", `translate(${xScale(0)}, 0)`)
+                    .call(yAxis)
+                    .selectAll("text").style("font-size", "10px");
+            }
+
+
+
+
+            // --- Dibujar la Parábola ---
+
+
+            // Generar puntos de la curva
+            const points = d3.range(xDomain[0], xDomain[1], (xDomain[1] - xDomain[0]) / 200).map(x => ({
+                x: x,
+                y: evaluateParabola(data, x)
+            }));
+
+
+            // Generador de líneas suaves (curvas)
+            const lineGenerator = d3.line()
+                .curve(d3.curveBasis) // Hace la curva más suave
+                .x(d => xScale(d.x))
+                .y(d => yScale(d.y));
+
+
+            g.append("path")
+                .datum(points)
+                .attr("fill", "none")
+                .attr("stroke", "#f97316") // Color Naranja
+                .attr("stroke-width", 3)
+                .attr("d", lineGenerator);
+
+
+            // --- Dibujar Puntos Clave ---
+
+
+            // Vértice (Morado)
+            g.append("circle")
+                .attr("cx", xScale(data.Vx))
+                .attr("cy", yScale(data.Vy))
+                .attr("r", 5)
+                .attr("fill", "#6d28d9"); // Púrpura
+
+
+            // Etiqueta del Vértice
+            g.append("text")
+                .attr("x", xScale(data.Vx) + 8)
+                .attr("y", yScale(data.Vy) - 5)
+                .style("font-size", "12px")
+                .style("font-weight", "bold")
+                .attr("fill", "#6d28d9")
+                .text(`V(${data.Vx}, ${data.Vy})`);
+
+
+            // Puntos de Corte en X (Verde)
+            data.x_cuts.forEach(x => {
+                g.append("circle")
+                    .attr("cx", xScale(x))
+                    .attr("cy", yScale(0))
+                    .attr("r", 5)
+                    .attr("fill", "#10b981"); // Verde
+            });
+
+
+            // Punto de Corte en Y (Azul)
+            g.append("circle")
+                .attr("cx", xScale(0))
+                .attr("cy", yScale(data.y_cut))
+                .attr("r", 5)
+                .attr("fill", "#3b82f6"); // Azul
+
+
+            // Actualizar tabla de resultados
+            updateResultsTable(data);
+        };
+
+
+        const updateResultsTable = (data) => {
+            document.getElementById('current-equation').textContent = `Función: ${data.eq}`;
+
+
+            let cutsX = 'No tiene cortes reales';
+            if (data.x_cuts.length === 1) {
+                cutsX = `(${data.x_cuts[0]}, 0)`;
+            } else if (data.x_cuts.length === 2) {
+                cutsX = `(${data.x_cuts[0]}, 0) y (${data.x_cuts[1]}, 0)`;
+            } else if (data.x_cuts.length > 0) {
+                 cutsX = data.x_cuts.map(x => `(${x.toFixed(2)}, 0)`).join(' y ');
+            }
+
+
+
+
+            const tableHtml = `
+                <div class="flex justify-between items-center border-b pb-2">
+                    <span class="font-bold text-lg text-purple-600">Vértice:</span>
+                    <span class="text-xl font-mono">(${data.Vx}, ${data.Vy})</span>
+                </div>
+                <div class="flex justify-between items-center border-b pb-2">
+                    <span class="font-bold text-md text-blue-600">Corte en el eje Y:</span>
+                    <span class="text-lg font-mono">(0, ${data.y_cut})</span>
+                </div>
+                <div class="flex justify-between items-center pt-2">
+                    <span class="font-bold text-md text-green-600">Corte(s) en el eje X (Raíces):</span>
+                    <span class="text-lg font-mono">${cutsX}</span>
+                </div>
+                <p class="text-sm text-gray-500 mt-2">La parábola ${data.a > 0 ? 'abre hacia ARRIBA (mínimo)' : 'abre hacia ABAJO (máximo)'}.</p>
+            `;
+            document.getElementById('results-table').innerHTML = tableHtml;
+        };
+
+
+
+
+        // --- Manejo de Eventos y Renderizado Inicial ---
+
+
+        const buttonContainer = document.getElementById('exercise-buttons');
+        functionsData.forEach(func => {
+            const button = document.createElement('button');
+            button.className = 'btn-exercise bg-gray-200 text-gray-700 py-2 px-4 rounded-lg font-medium hover:bg-orange-100 text-sm focus:outline-none';
+            button.textContent = `Ecuación ${func.id}`;
+            button.dataset.id = func.id;
+            button.addEventListener('click', () => {
+                loadFunction(func.id);
+            });
+            buttonContainer.appendChild(button);
+        });
+
+
+        const loadFunction = (id) => {
+            const selectedData = functionsData.find(e => e.id === id);
+            if (selectedData) {
+                drawChart(selectedData);
+
+
+                // Actualizar clases de los botones
+                document.querySelectorAll('.btn-exercise').forEach(btn => {
+                    btn.classList.remove('active', 'bg-orange-600');
+                    btn.classList.add('bg-gray-200', 'text-gray-700');
+                    if (parseInt(btn.dataset.id) === id) {
+                        btn.classList.add('active', 'bg-orange-600');
+                        btn.classList.remove('bg-gray-200', 'text-gray-700');
+                    }
+                });
+            }
+        };
+
+
+        // Renderizado inicial (Ecuación 1)
+        window.addEventListener('load', () => {
+            loadFunction(1);
+        });
+
+
+        // Manejo de redimensionamiento
+        window.addEventListener('resize', () => {
+             const activeBtn = document.querySelector('.btn-exercise.active');
+             if (activeBtn) {
+                 loadFunction(parseInt(activeBtn.dataset.id));
+             }
+        });
+    </script>
+</body>
+</html>
